@@ -6,8 +6,12 @@ import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
 import connectDB from './config/db.js';
 import Challenge from './models/Challenge.js';
+// import seedChallenges from './data/challenges.js';
 import authRouter from './routes/authRoutes.js';
 import challengeRouter from './routes/challengeRoutes.js';
+import projectRouter from './routes/projectRoutes.js';
+import statsRouter from './routes/statsRoutes.js';
+import aiRouter from './routes/aiRoutes.js';
 import userRouter from './routes/userRoutes.js';
 
 // Initialize app
@@ -41,6 +45,8 @@ const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false
 });
+
+// app.use(globalLimiter);
 
 // ─── Database Connection + Seeding ──────────────────────────────────────────
 
@@ -79,7 +85,10 @@ connectDB()
       console.log(`🔐 CORS Origin: ${process.env.FRONTEND_ORIGIN || 'http://localhost:5173'}`);
       console.log(`\n📚 Available Routes:`);
       console.log(`   → Challenges: /api/challenges`);
+      console.log(`   → Projects:   /api/projects`);
       console.log(`   → Auth:       /api/auth`);
+      console.log(`   → Stats:      /api/stats`);
+      console.log(`   → AI:         /api/ai`);
       console.log(`   → Users:      /api/users`);
       console.log(`   → Health:     /health`);
     });
@@ -110,6 +119,15 @@ app.use('/api/auth', authRouter);
 // Pipeline 2: Debugging Challenges (curated)
 app.use('/api/challenges', challengeRouter);
 
+// Pipeline 1: User-Uploaded Projects
+app.use('/api/projects', projectRouter);
+
+// Pipeline 3: Analytics & Stats
+app.use('/api/stats', statsRouter);
+
+// Legacy AI routes (still used by Debug.jsx for evaluate/hint fallback)
+app.use('/api/ai', aiRouter);
+
 // User profile routes
 app.use('/api/users', userRouter);
 
@@ -122,6 +140,9 @@ app.use((req, res) => {
     availableEndpoints: {
       auth: '/api/auth',
       challenges: '/api/challenges',
+      projects: '/api/projects',
+      stats: '/api/stats',
+      ai: '/api/ai',
       users: '/api/users',
       health: '/health'
     }
@@ -168,3 +189,6 @@ app.use((err, req, res, next) => {
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
+
+// Server listen moved to database initialization block
+export default app;
