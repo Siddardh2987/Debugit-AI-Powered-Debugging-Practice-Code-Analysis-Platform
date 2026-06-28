@@ -17,6 +17,7 @@ import userRouter from './routes/userRoutes.js';
 // Initialize app
 const app = express();
 const PORT = process.env.PORT || 3000;
+const isProd = process.env.NODE_ENV === 'production';
 
 // ─── CORS Configuration ─────────────────────────────────────────────────────
 
@@ -32,6 +33,11 @@ app.options('*', cors(corsOptions));
 app.use(cookieParser());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Trust proxy for secure cookies/headers on Vercel
+if (isProd) {
+  app.set("trust proxy", 1);
+}
 
 // ─── Global Rate Limiter ────────────────────────────────────────────────────
 
@@ -57,7 +63,7 @@ const seedDB = async () => {
       return;
     }
     const count = await Challenge.countDocuments();
-    if (count === 0) {
+    if (count === 0 && typeof seedChallenges !== 'undefined') {
       console.log('🌱 Seeding challenges...');
       await Challenge.insertMany(
         seedChallenges.map(c => {
@@ -65,7 +71,7 @@ const seedDB = async () => {
           return rest;
         })
       );
-      console.log(`✅ Seeded ${seedChallenges.length} challenges.`);
+      console.log(`✅ Seeded challenges.`);
     } else {
       console.log(`💡 ${count} challenges already in database.`);
     }
@@ -74,29 +80,24 @@ const seedDB = async () => {
   }
 };
 
-connectDB()
-  .then(() => {
+// Ensure DB is connected before processing requests
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    // Non-blocking background seeding if necessary
     seedDB();
+    next();
+  } catch (err) {
+    console.error("❌ MongoDB connection failed:", err.message);
+    res.status(500).json({ success: false, message: "Database connection failed. Please try again." });
+  }
+});
 
-    // Start Server
-    app.listen(PORT, () => {
-      console.log(`🚀 DebugIt API running on port ${PORT}`);
-      console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🔐 CORS Origin: ${process.env.FRONTEND_ORIGIN || 'http://localhost:5173'}`);
-      console.log(`\n📚 Available Routes:`);
-      console.log(`   → Challenges: /api/challenges`);
-      console.log(`   → Projects:   /api/projects`);
-      console.log(`   → Auth:       /api/auth`);
-      console.log(`   → Stats:      /api/stats`);
-      console.log(`   → AI:         /api/ai`);
-      console.log(`   → Users:      /api/users`);
-      console.log(`   → Health:     /health`);
-    });
-  })
-  .catch((err) => {
-    console.error('❌ Database initialization failed. Exiting process...');
-    process.exit(1);
-  });
+// ─── Root Route ─────────────────────────────────────────────────────────────
+
+app.get("/", (req, res) => {
+  res.send("API WORKING");
+});
 
 // ─── Health Check ───────────────────────────────────────────────────────────
 
@@ -186,9 +187,17 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    ...(!isProd && { stack: err.stack })
   });
 });
 
-// Server listen moved to database initialization block
+// Local dev server listener (Vercel uses export default app instead)
+if (!isProd) {
+  app.listen(PORT, () => {
+    console.log(`🚀 DebugIt API running on port ${PORT}`);
+    console.log(`📍 Environment: local-development`);
+    console.log(`🔐 CORS Origin: ${process.env.FRONTEND_ORIGIN || 'http://localhost:5173'}`);
+  });
+}
+
 export default app;
