@@ -28,6 +28,7 @@ export default function Debug() {
   const [aiResult, setAiResult] = useState(null);
   const [showResult, setShowResult] = useState(false);
   const [terminalLines, setTerminalLines] = useState([]);
+  const [terminalLoaded, setTerminalLoaded] = useState(false);
   const [sidebarTab, setSidebarTab] = useState('chat');
   const [editorFullscreen, setEditorFullscreen] = useState(false);
   const [hintLevel, setHintLevel] = useState(1); // tracks progressive hint level 1-3
@@ -42,10 +43,27 @@ export default function Debug() {
     terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [terminalLines]);
 
+  // Sync terminalLines to backend database when updated
+  useEffect(() => {
+    if (!terminalLoaded || !projectId || !isLoggedIn) return;
+    if (terminalLines.length === 0) return; // Handled by DELETE request on clear button click
+    
+    const syncTerminal = async () => {
+      await apiRequest(`/api/challenges/${projectId}/terminal`, {
+        method: 'PUT',
+        body: JSON.stringify({ terminalLines }),
+      });
+    };
+    
+    syncTerminal();
+  }, [terminalLines, terminalLoaded, projectId, isLoggedIn, apiRequest]);
+
   useEffect(() => {
     if (loading) return;
     if (!isLoggedIn) { navigate('login'); return; }
     if (!projectId) { navigate('projects'); return; }
+
+    setTerminalLoaded(false);
 
     const loadProject = async () => {
       // Use /api/challenges for curated challenges
@@ -96,12 +114,25 @@ export default function Debug() {
         setFileContents(init);
       }
 
-      setTerminalLines([
-        '$ Challenge loaded: ' + currentProj.project_title,
-        '$ ' + currentProj.files.length + ' file(s) opened',
-        '$ ' + currentProj.description,
-        '$ Ready to debug...',
-      ]);
+      // Load saved terminal history from backend
+      const termRes = await apiRequest(`/api/challenges/${projectId}/terminal`);
+      if (!termRes.error && termRes.data && termRes.data.terminalLines && termRes.data.terminalLines.length > 0) {
+        setTerminalLines(termRes.data.terminalLines);
+      } else {
+        const defaultLines = [
+          '$ Challenge loaded: ' + currentProj.project_title,
+          '$ ' + currentProj.files.length + ' file(s) opened',
+          '$ ' + currentProj.description,
+          '$ Ready to debug...',
+        ];
+        setTerminalLines(defaultLines);
+        // Initialize terminal history in DB
+        await apiRequest(`/api/challenges/${projectId}/terminal`, {
+          method: 'PUT',
+          body: JSON.stringify({ terminalLines: defaultLines }),
+        });
+      }
+      setTerminalLoaded(true);
 
       // Load saved chat history from backend
       const chatRes = await apiRequest(`/api/challenges/${projectId}/chat`);
@@ -485,7 +516,12 @@ export default function Debug() {
                 <Terminal className="w-3 h-3 text-slate-500 ml-1" />
                 <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Terminal</span>
                 <button
-                  onClick={() => setTerminalLines([])}
+                  onClick={async () => {
+                    setTerminalLines([]);
+                    if (project?.id) {
+                      await apiRequest(`/api/challenges/${project.id}/terminal`, { method: 'DELETE' });
+                    }
+                  }}
                   className="ml-auto text-xs text-slate-700 hover:text-slate-400 transition-colors mono"
                   title="Clear terminal"
                 >
