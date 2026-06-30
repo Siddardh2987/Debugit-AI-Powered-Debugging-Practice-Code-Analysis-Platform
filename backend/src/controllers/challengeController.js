@@ -1,7 +1,7 @@
 import Challenge from '../models/Challenge.js';
 import Submission from '../models/Submission.js';
 import ChallengeChat from '../models/ChallengeChat.js';
-import ChallengeTerminal from '../models/ChallengeTerminal.js';
+import ChallengeTerminal from '../models/challengeTerminal.js';
 import { evaluateSubmission } from '../services/evaluator.js';
 import { updateStatsAfterSubmission, incrementStat } from '../controllers/statsController.js';
 // import seedChallenges from '../data/challenges.js';
